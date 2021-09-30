@@ -1,0 +1,127 @@
+<platform_solution><objects><form_script><custom_fields></custom_fields><name>grab_amount_remaining.js</name><event>after_save</event><libraries></libraries><comments></comments><entrance_function>main</entrance_function><parameters></parameters><__is_linked>true</__is_linked><association>request_item_form</association><code><![CDATA[function main(type) {
+    // Grab some form values
+    var cusprjid = NSOA.form.getValue('customer_project');
+    var prjid = cusprjid.substr(cusprjid.lastIndexOf(":") + 1);
+    var prdid = NSOA.form.getValue('product_id');
+    var ptask = NSOA.form.getValue('project_task_id');
+    
+    NSOA.meta.log('debug','Project id: ' + prjid+ ' Nominal Code: '+prdid +' Task ID: '+ ptask);
+    
+    // Define project budget group filter
+    var pbgroup = new NSOA.record.oaProjectBudgetGroup();
+	pbgroup.projectid = prjid;
+    pbgroup.approval_status = 'O';
+    // Define the pbg read request
+    var readpbgroup = {
+        type : 'ProjectBudgetGroup',
+        method : 'equal to', 
+        fields : 'id', 
+        attributes : [ 
+            {
+                name : 'limit',
+                value : '1'
+            }
+        ],
+        objects : [ 
+            pbgroup
+        ]
+    };
+    // Invoke the pbg read call
+    var pbgrpresults = NSOA.wsapi.read(readpbgroup);
+    var openpbg = pbgrpresults[0].objects[0].id;
+    NSOA.meta.log('debug', 'Current Open Project Budget for this Project: ' + openpbg);
+    
+    
+    // Define project budget rule filter
+    var pbrule = new NSOA.record.oaProjectBudgetRule();
+	pbrule.projectid = prjid;
+    pbrule.project_budget_groupid = openpbg;
+    pbrule.productid = prdid;
+    pbrule.project_taskid = ptask;
+    // Define the pbr read request
+    var readpbrule = {
+        type : 'ProjectBudgetRule',
+        method : 'equal to', 
+        fields : 'id, total', 
+        attributes : [ 
+            {
+                name : 'limit',
+                value : '1'
+            }
+        ],
+        objects : [ 
+            pbrule
+        ]
+    };
+    // Invoke the pbr read call
+    var ruleresults = NSOA.wsapi.read(readpbrule);
+    var ruleid = ruleresults[0].objects[0].id;
+    var ruletotal = parseFloat(ruleresults[0].objects[0].total);
+    NSOA.meta.log('debug', 'Project Budget Rule ID: ' + ruleid + ' Project Budget Rule Total: ' + ruletotal);
+    
+    // Define Request Item filter
+    var reqitems = new NSOA.record.oaRequest_item();
+	reqitems.projectid = prjid;
+    reqitems.productid = prdid;
+    reqitems.project_task_id = ptask;
+    // Define the request item read results
+    var readreqitems = {
+        type : 'Request_item',
+        method : 'equal to', 
+        fields : 'id, total', 
+        attributes : [ 
+            {
+                name : 'limit',
+                value : '100'
+            }
+        ],
+        objects : [ 
+            reqitems
+        ]
+    };
+    // Invoke the request item read
+    var reqitemresults = NSOA.wsapi.read(readreqitems);
+    var reqitemstotal = 0;
+    for (var i= 0; i < reqitemresults[0].objects.length; i++){
+    var thisitemtotal = parseFloat(reqitemresults[0].objects[i].total);
+        reqitemstotal += thisitemtotal;
+    }
+    
+    NSOA.meta.log('debug', 'Total of the Request Items with this search criteria: ' + reqitemstotal);
+    var remainingtotal = ruletotal - reqitemstotal;
+    
+    if(reqitemstotal > ruletotal){
+        NSOA.form.warning('This request will put you over your originally estimated spend for this item on this task. Current Overage: '+ remainingtotal);
+        var overTotal = upTask(prjid,ptask,prdid,ruletotal,reqitemstotal);
+        
+    }else{
+        NSOA.form.confirmation('Check your project task for the remaining budget on this task. Current remainder: ' + remainingtotal);        
+        var underTotal = upTask(prjid,ptask,prdid,ruletotal,reqitemstotal);
+    }
+    
+    NSOA.meta.log('info', 'Units remaining: ' + NSOA.context.remainingUnits());
+    
+}
+
+function upTask(prjid,ptask,prdid,ruletotal,reqitemstotal){
+    // Specify that the lookup is done by external_id and not by (default) internal id
+        var attributeexternal = [{
+            name : 'lookup',
+            value : 'externalid'
+        },
+        {
+            name:'update_custom',
+            value:'1'
+        }];
+        
+        // Define the task assignment to create/update
+        var taskassign = new NSOA.record.oaProjecttaskassign();
+        taskassign.userid = attributeexternal;
+        taskassign.externalid = prjid+ptask+prdid;
+        taskassign.projecttaskid = ptask;
+        taskassign.projectid = prjid;
+        taskassign.freelancerRemainingBudget__c = ruletotal-reqitemstotal;
+
+        // Invoke the upsert call
+        var upstask = NSOA.wsapi.upsert(attributeexternal, [taskassign]);
+}]]></code></form_script></objects><version>1.1</version><title>Get Remaining Amount</title><description>Checks the OA Project Budget for a combo of task/product. If the current Purchase Request will put you over the budgeted total, you will receive a warning.</description></platform_solution>
