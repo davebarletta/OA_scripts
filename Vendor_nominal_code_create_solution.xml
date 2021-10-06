@@ -1,0 +1,55 @@
+<platform_solution><objects><checkbox_cust_field><divider_text></divider_text><name>nominalCodeCreated</name><never_copy>false</never_copy><description></description><with_notes>false</with_notes><checked>false</checked><hint></hint><hidden>false</hidden><title>Nominal Code Created</title><association>vendor</association><divider>false</divider></checkbox_cust_field><text_cust_field><field_size>25</field_size><never_copy>false</never_copy><required>false</required><association>vendor</association><divider_text></divider_text><unique>false</unique><name>nominalCodeId</name><description></description><with_notes>false</with_notes><hint></hint><title>Nominal Code Internal Id</title><hidden>false</hidden><max_length>25</max_length><divider>false</divider></text_cust_field><checkbox_cust_field><divider_text></divider_text><name>vendorSplitOut</name><never_copy>false</never_copy><description></description><with_notes>false</with_notes><checked>false</checked><hint></hint><hidden>false</hidden><title>Split Freelancer in Project Budget</title><association>vendor</association><divider>false</divider></checkbox_cust_field><schedule_script><custom_fields><custom_field>vendorSplitOut</custom_field><custom_field>nominalCodeCreated</custom_field><custom_field>nominalCodeId</custom_field></custom_fields><name>Vendor_nominal_code_create.js</name><comments></comments><libraries></libraries><entrance_function>main</entrance_function><parameters></parameters><__is_linked>true</__is_linked><code><![CDATA[function main() {
+    var attributes = [
+        {
+            name:"update_custom",
+            value:"1"
+        }
+    ]; 	
+    // Define the read request
+    var vendor = new NSOA.record.oaVendor();
+    vendor.vendorSplitOut__c = 1;
+    vendor.nominalCodeCreated__c = '';
+    var vendorRequest ={
+        type:"Vendor",
+        method:"equal to", 
+        fields:"id,name,netsuite_vendor_id__c",
+        attributes:[
+            {
+                name:"limit",
+                value:"1000"
+            }
+        ],
+        objects:[vendor] 
+    };
+    var vendorResults = NSOA.wsapi.read(vendorRequest);
+    //Validate that the Query returned results
+    if (vendorResults[0].objects !== null){
+        //Log the number of records returned
+        NSOA.meta.log("info","Vendors Found: " + vendorResults[0].objects.length);
+        //Loop through the results to create a new Nominal Code for each Vendor
+        for(var i = 0 ; i < vendorResults[0].objects.length ; i++){
+            var nominalCode = new NSOA.record.oaProduct();
+            nominalCode.name = vendorResults[0].objects[i].name;
+            nominalCode.nominalCodeVendor__c = vendorResults[0].objects[i].id;
+            nominalCode.nsVendorId__c = vendorResults[0].objects[i].id;
+            nominalCode.active = 1;
+            var addNominalCode = NSOA.wsapi.add([nominalCode]);
+            var newId = addNominalCode[0].id;
+            NSOA.meta.log("info","New Nominal Code Created. ID = " + newId);
+            //update vendor with details, and to remove from future script runs                       
+            if(newId !== null){
+                var updateVendor = new NSOA.record.oaVendor();
+                updateVendor.id =vendorResults[0].objects[i].id;
+                updateVendor.nominalCodeCreated__c = 1;
+                updateVendor.nominalCodeId__c = newId;
+                var vendorUpdateResult = NSOA.wsapi.modify(attributes, [updateVendor]);
+                NSOA.meta.log("info","The vendor "+ vendorResults[0].objects[i].name + " was succesfully updated!" );
+            }else{NSOA.meta.log("info","There was a problem creating the Nominal Code for the vendor named: "+ vendorResults[0].objects[i].name);}
+        }
+        try{
+            
+        }catch (error){
+            NSOA.meta.log('error',error);
+        }
+    }else{NSOA.meta.log("info", "No New Vendors Found.");}
+}]]></code></schedule_script></objects><version>1.1</version><title>Vendor Nominal Code Create</title><description>Creates a new Purchase Item for each vendor for use in the Project Budget. Any actuals that come back from that vendor will be matched in OA to this ID via NSOA integration so budgeting can be done by Vendor.</description></platform_solution>
