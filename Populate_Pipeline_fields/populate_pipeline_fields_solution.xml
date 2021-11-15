@@ -1,0 +1,311 @@
+<platform_solution><objects><library_script><parameters></parameters><custom_fields></custom_fields><name>date_utils.js</name><libraries></libraries><comments></comments><code><![CDATA[// Date utils
+// Expected OpenAir date format is a string of form: "YYYY-MM-DD 0:0:0"
+
+
+function date_to_string(date) {
+    var d = new Date(date);
+    var month = (d.getMonth() + 1).toString();
+    var day = d.getDate().toString();
+    var year = d.getFullYear();
+
+    // add leading zeros if necessary
+    if (month.length < 2)
+        month = '0' + month;
+    if (day.length < 2)
+        day = '0' + day;
+
+    return [year, month, day].join('-') + ' 0:0:0';
+}
+
+
+function string_to_date(date_string) {
+    var aYMD = date_string.split(' ');
+    aYMD = aYMD[0].split('-');
+    return new Date(aYMD[0], aYMD[1] - 1, aYMD[2]);
+}
+
+
+function get_day_difference(start_date_string, end_date_string) {
+    var start_date = string_to_date(start_date_string);
+    var end_date = string_to_date(end_date_string);
+    var diff_time = end_date - start_date;
+    return Math.ceil(diff_time / (1000 * 60 * 60 * 24));
+}
+
+
+function get_working_day_difference(start_date_string, end_date_string) {
+    // source: https://www.codegrepper.com/code-examples/javascript/exclude+weekends+in+javascript+date+calculation
+    var startDate = string_to_date(start_date_string);
+    var endDate = string_to_date(end_date_string);
+    var elapsed, daysBeforeFirstSaturday, daysAfterLastSunday;
+    var ifThen = function (a, b, c) {
+        return a === b ? c : a;
+    };
+
+    elapsed = endDate - startDate;
+    elapsed /= 86400000;
+
+    daysBeforeFirstSunday = (7 - startDate.getDay()) % 7;
+    daysAfterLastSunday = endDate.getDay();
+
+    elapsed -= (daysBeforeFirstSunday + daysAfterLastSunday);
+    elapsed = (elapsed / 7) * 5;
+    elapsed += ifThen(daysBeforeFirstSunday - 1, -1, 0) + ifThen(daysAfterLastSunday, 6, 5);
+
+    return Math.ceil(elapsed);
+}
+
+
+function add_days(date_string, days_int) {
+    var date = string_to_date(date_string);
+    date.setDate(date.getDate() + days_int);
+    return date;
+}
+
+
+function add_working_days(date_string, days_int) {
+    // source: https://gist.github.com/psdtohtml5/7000529
+    var date = Dates.string_to_date(date_string);
+    var day = date.getDay();
+    date.setDate(date.getDate() + days_int + (day === 6 ? 2 : +!day) + (Math.floor((days_int - 1 + (day % 6 || 1)) / 5) * 2));
+    return date;
+}
+
+
+function get_days_to_weekday(date_string) {
+    var date = string_to_date(date_string);
+    var day = date.getDay();
+    var day_shift = 0;
+    if (day === 0) {  // Sunday
+        day_shift = 1;
+    }
+    if (day === 6) {  // Saturday
+        day_shift = 2;
+    }
+    return day_shift;
+}
+
+
+// make functions available to other scripts
+exports.date_to_string = date_to_string;
+exports.string_to_date = string_to_date;
+exports.get_day_difference = get_day_difference;
+exports.get_working_day_difference = get_working_day_difference;
+exports.add_days = add_days;
+exports.add_working_days = add_working_days;
+exports.get_days_to_weekday = get_days_to_weekday;]]></code></library_script><numeric_cust_field><never_copy>false</never_copy><size>12</size><required>false</required><association>project</association><divider_text></divider_text><unique>false</unique><decimal_positions>2</decimal_positions><name>prjamount</name><description></description><with_notes>false</with_notes><hint>In Billing Currency</hint><hidden>false</hidden><title>Revenue</title><divider>false</divider></numeric_cust_field><numeric_cust_field><never_copy>false</never_copy><size>12</size><required>false</required><association>project</association><divider_text></divider_text><unique>false</unique><decimal_positions>2</decimal_positions><name>prjTargetCost</name><description></description><with_notes>false</with_notes><hint></hint><hidden>false</hidden><title>Total Target Cost</title><divider>false</divider></numeric_cust_field><numeric_cust_field><never_copy>false</never_copy><size>12</size><required>false</required><association>project</association><divider_text>Pipeline Fields</divider_text><unique>false</unique><decimal_positions>2</decimal_positions><name>prjForecastCost</name><description></description><with_notes>false</with_notes><hint></hint><hidden>false</hidden><title>Total Forecast Cost</title><divider>true</divider></numeric_cust_field><numeric_cust_field><never_copy>false</never_copy><size>12</size><required>false</required><association>project</association><divider_text></divider_text><unique>false</unique><decimal_positions>2</decimal_positions><name>prjMargin</name><description></description><with_notes>false</with_notes><hint></hint><hidden>false</hidden><title>Margin</title><divider>false</divider></numeric_cust_field><numeric_cust_field><never_copy>false</never_copy><size>12</size><required>false</required><association>project</association><divider_text></divider_text><unique>false</unique><decimal_positions>2</decimal_positions><name>prjVariance</name><description></description><with_notes>false</with_notes><hint></hint><hidden>false</hidden><title>Variance (Target - Forecast)</title><divider>false</divider></numeric_cust_field><numeric_cust_field><never_copy>false</never_copy><size>12</size><required>false</required><association>project</association><divider_text></divider_text><unique>false</unique><decimal_positions>2</decimal_positions><name>prjContribution</name><description></description><with_notes>false</with_notes><hint></hint><hidden>false</hidden><title>Contribution</title><divider>false</divider></numeric_cust_field><text_cust_field><field_size>25</field_size><never_copy>false</never_copy><required>false</required><association>project</association><divider_text></divider_text><unique>false</unique><name>prjMarginPercent</name><description></description><with_notes>false</with_notes><hint></hint><title>Margin %</title><hidden>false</hidden><max_length>25</max_length><divider>false</divider></text_cust_field><numeric_cust_field><never_copy>false</never_copy><size>12</size><required>false</required><association>project</association><divider_text></divider_text><unique>false</unique><decimal_positions>2</decimal_positions><name>prjbrtotal</name><description></description><with_notes>false</with_notes><hint></hint><hidden>false</hidden><title>Billing Rule Total</title><divider>false</divider></numeric_cust_field><numeric_cust_field><never_copy>false</never_copy><size>12</size><required>false</required><association>project</association><divider_text></divider_text><unique>false</unique><decimal_positions>2</decimal_positions><name>prjrrrtotal</name><description></description><with_notes>false</with_notes><hint></hint><hidden>false</hidden><title>Revenue Rule Total</title><divider>false</divider></numeric_cust_field><checkbox_cust_field><divider_text></divider_text><name>ruleTotalsDiff</name><never_copy>false</never_copy><description></description><with_notes>false</with_notes><checked>false</checked><hint></hint><hidden>false</hidden><title>Rule Totals Different</title><association>project</association><divider>false</divider></checkbox_cust_field><schedule_script><custom_fields><custom_field>prjamount</custom_field><custom_field>prjForecastCost</custom_field><custom_field>prjTargetCost</custom_field><custom_field>prjContribution</custom_field><custom_field>prjVariance</custom_field><custom_field>prjMargin</custom_field><custom_field>prjMarginPercent</custom_field><custom_field>prjbrtotal</custom_field><custom_field>prjrrrtotal</custom_field><custom_field>ruleTotalsDiff</custom_field></custom_fields><name>populate_pipeline_fields.js</name><comments></comments><libraries><library>date_utils.js</library></libraries><entrance_function>main</entrance_function><parameters></parameters><__is_linked>true</__is_linked><code><![CDATA[function main() { 
+    var datelib = require('date_utils');
+    var today = new Date();
+    var datestring = datelib.date_to_string(today);
+    //Get all Active Projects
+    var activeprjs = new NSOA.record.oaProject(); //Create the object to define the search criteria for our read
+    activeprjs.active = '1'; 
+    // Define the read request
+    var readactive = {
+        type: 'Project', //SOAP Object to search
+        method: 'equal to',  //Whether it is inclusive or exclusive search criteria
+        fields: 'id, name, customerid, prjamount__c, currency', //Fields to return in your array
+        attributes: [ 
+            {
+                name: 'limit', //Limit is required
+                value: '1000' //how many records to return, maximum allowance is 1000
+            }
+        ],
+        objects: [ 
+            activeprjs //add the search criteria variable from above in here
+        ]
+    };
+    // Invoke the read call
+    var allactiveprojects = NSOA.wsapi.read(readactive); //Passing the results of your search to a new Array vartiable
+    NSOA.meta.log('debug', 'There are '+ allactiveprojects[0].objects.length+ ' active projects.'); //Used to validate that the search worked
+    for (var a = 0; a < allactiveprojects[0].objects.length; a++){ //this helps to loop through each record within the Array of results
+        try{
+            var bramounts = [];
+            var rramounts = [];
+            calcRuleTotals(allactiveprojects[0].objects[a].id, bramounts, rramounts);
+            var brstotal = Number(bramounts.reduce(function(priorvalue, nextvalue){
+                    return Number(priorvalue) + Number(nextvalue);
+                }, 0));
+            var rrrtotal = Number(rramounts.reduce(function(oldvalue, newvalue){
+                    return Number(oldvalue) + Number(newvalue);
+                }, 0));
+            var pbgrecord = new NSOA.record.oaProjectBudgetGroup();
+            pbgrecord.projectid =allactiveprojects[0].objects[a].id;
+            // Define the read request
+            var readpbg = {
+                type: 'ProjectBudgetGroup', //SOAP Object to search
+                method: 'equal to',  //Whether it is inclusive or exclusive search criteria
+                fields: 'id, total_calculated_cost, approval_status', //Fields to return in your array
+                attributes: [ 
+                    {
+                        name: 'limit', //Limit is required
+                        value: '1000' //how many records to return, maximum allowance is 1000
+                    }
+                ],
+                objects: [ 
+                    pbgrecord //add the search criteria variable from above in here
+                ]
+            };
+            var allpbgs = NSOA.wsapi.read(readpbg); //Passing the results of your search to a new Array variable
+            if(allpbgs[0].objects.length !== null){
+                NSOA.meta.log('debug', 'For this project: ' + allactiveprojects[0].objects[a].id + ' there are ' + allpbgs[0].objects.length + ' Project Budget Records.');
+                var approvalstatusarray = [];
+                var costarray=[];
+                for(var b=0; b < allpbgs[0].objects.length; b++){
+                   approvalstatusarray.push(allpbgs[0].objects[b].approval_status);
+                    costarray.push(allpbgs[0].objects[b].total_calculated_cost);
+                }
+                var approvedbudget = approvalstatusarray.indexOf('A');
+                var openbudget = approvalstatusarray.indexOf('O');
+                NSOA.meta.log('debug','Approved: '+ approvedbudget+ ' Open: '+ openbudget );
+                 NSOA.meta.log('debug',JSON.stringify(costarray));
+                var currentprjrev = allactiveprojects[0].objects[a].prjamount__c;
+                var targetcost = costarray[approvedbudget];
+                var forecastcost = costarray[openbudget];
+                if (forecastcost === undefined){
+                    forecastcost =0;
+                }else{forecastcost=forecastcost;}
+                if (targetcost === undefined){
+                    targetcost =0;
+                }else{targetcost=targetcost;}
+                var margin = (currentprjrev - forecastcost)/currentprjrev;
+                var variance = targetcost - forecastcost;
+                var contribution = currentprjrev - forecastcost;
+                if(margin !== margin){
+                    margin = 0;
+                }else{margin=margin;}
+                
+                var update_custom = [{
+                    name:'update_custom',
+                    value:'1'
+                }
+                ];
+                var budgcheck = archive_budget(allactiveprojects[0].objects[a].id, forecastcost, allactiveprojects[0].objects[a].currency, datestring );
+                var updateproject = new NSOA.record.oaProject();
+                updateproject.id=allactiveprojects[0].objects[a].id;
+                updateproject.name=allactiveprojects[0].objects[a].name;
+                updateproject.customerid=allactiveprojects[0].objects[a].customerid;
+                updateproject.prjTargetCost__c = targetcost;
+                updateproject.prjForecastCost__c = forecastcost;
+                updateproject.prjVariance__c = variance;
+                updateproject.prjMargin__c = margin;
+                updateproject.prjContribution__c = contribution;
+                updateproject.prjMarginPercent__c = Math.round(margin * 100) + '%';
+                updateproject.prjbrtotal__c = brstotal;
+                updateproject.prjrrrtotal__c = rrrtotal;
+                if(brstotal !== rrrtotal){
+                    updateproject.ruleTotalsDiff__c = '1';
+                }else{updateproject.ruleTotalsDiff__c = '0';}
+                var projectupsert = NSOA.wsapi.modify(update_custom, [updateproject]);
+                NSOA.meta.log('debug', JSON.stringify(projectupsert));
+                
+                NSOA.meta.log('debug', 'Approved: '+ approvedbudget+ ' Open: '+ openbudget+ ' Target: '+targetcost+' Forecast: '+ forecastcost+ ' Revenue: '+ currentprjrev+' Variance: '+ variance+ ' Margin: '+margin+' Contribution: '+contribution + ' BR Total: '+ brstotal+ ' Rev Rules Total: ' + rrrtotal);
+                
+                
+            }else{
+                NSOA.meta.log('debug', 'There were no Project Budget records found for project: ' + allactiveprojects[0].objects[a].id);
+            }
+            
+        }catch(error){
+            NSOA.meta.log('debug',error);
+        }
+    }
+
+
+}
+
+function archive_budget(project,forecast,currency,date){
+    var currentbudget = new NSOA.record.oaBudget();
+    currentbudget.projectid = project;
+    currentbudget.budgetcategory_id = 7;
+    // Define the read request
+    var readRequest = {
+        type : 'Budget',
+        method : 'equal to', // return only records that match search criteria
+        fields : 'id, total', // specify fields to be returned
+        attributes : [ // Limit attribute is required; type is Attribute
+            {
+                name : 'limit',
+                value : '1'
+            }
+        ],
+        objects : [ // One object with search criteria; type implied by rr type
+            currentbudget
+        ]
+    };
+    // Invoke the read call
+    var results = NSOA.wsapi.read(readRequest);
+    var currentbudgetid = results[0].objects[0].id;
+    var currentbudgettotal = results[0].objects[0].total;
+    
+    if(currentbudgettotal !== forecast){
+        var modifybudget = new NSOA.record.oaBudget();
+        modifybudget.id = currentbudgetid;
+        modifybudget.budgetcategory_id = 6;
+        modifybudget.total = 0;
+        var attributes = [];
+
+        // Invoke the modify call
+        var modresults = NSOA.wsapi.modify(attributes, [modifybudget]);
+        // Define a category object to create in OpenAir
+        var newbudget = new NSOA.record.oaCategory();
+        newbudget.name = 'Forecast Cost from Project Budget';
+        newbudget.description = 'Forecast Cost from Project Budget';
+        newbudget.currency = currency;
+        newbudget.total = forecast;
+        newbudget.date = date;
+        
+    }else{return;}
+
+	return;
+}
+
+
+function calcRuleTotals(currentproj, currentbrtotal, currentrrtotal) {
+    var projectbillingrules = new NSOA.record.oaProjectbillingrule();
+    projectbillingrules.projectid = currentproj;
+    projectbillingrules.type = 'F';
+    // Define the read request
+    var readbrs = {
+        type: 'Projectbillingrule', //SOAP Object to search
+        method: 'equal to', //Whether it is inclusive or exclusive search criteria
+        fields: 'id, amount, type', //Fields to return in your array
+        attributes: [{
+            name: 'limit', //Limit is required
+            value: '1000' //how many records to return, maximum allowance is 1000
+        }],
+        objects: [
+            projectbillingrules //add the search criteria variable from above in here
+        ]
+    };
+    var allbrs = NSOA.wsapi.read(readbrs); //Passing the results of your search to a new Array variable
+    NSOA.meta.log('debug', 'Project Billing Rules: ' + JSON.stringify(allbrs));
+    var projectrevrules = new NSOA.record.oaRevenue_recognition_rule();
+    projectrevrules.projectid = currentproj;
+    // Define the read request
+    var readrrrs = {
+        type: 'Revenue_recognition_rule', //SOAP Object to search
+        method: 'equal to', //Whether it is inclusive or exclusive search criteria
+        fields: 'id, amount, type', //Fields to return in your array
+        attributes: [{
+            name: 'limit', //Limit is required
+            value: '1000' //how many records to return, maximum allowance is 1000
+        }],
+        objects: [
+            projectrevrules //add the search criteria variable from above in here
+        ]
+    };
+    var allrrrs = NSOA.wsapi.read(readrrrs); //Passing the results of your search to a new Array variable
+    NSOA.meta.log('debug', 'Project Revenue Rules: ' + JSON.stringify(allrrrs));
+
+    for (var ai = 0; ai < allbrs[0].objects.length; ai++) {
+        currentbrtotal.push(allbrs[0].objects[ai].amount);
+    }
+    for (var bi = 0; bi<allrrrs[0].objects.length;bi++){
+        currentrrtotal.push(allrrrs[0].objects[bi].amount);
+    }
+}
+
+function add(accumulator, a) {
+    return accumulator + a;
+}]]></code></schedule_script></objects><version>1.1</version><title>populate_pipeline_fields</title><description></description></platform_solution>

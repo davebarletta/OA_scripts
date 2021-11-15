@@ -1,0 +1,322 @@
+<platform_solution><objects><checkbox_cust_field><divider_text></divider_text><name>brScriptProcessed</name><never_copy>false</never_copy><description></description><with_notes>false</with_notes><checked>false</checked><hint></hint><hidden>false</hidden><title>Processed by Script</title><association>slip</association><divider>false</divider></checkbox_cust_field><dropdown_cust_field><divider_text></divider_text><name>rev_cat</name><never_copy>false</never_copy><values><value>External Billable</value><value>External Billable - Prepay</value><value>External Billable - Prepay/Milestone</value><value>Premium Support</value><value>SSP - License Bundle</value><value>Concession - PS</value><value>Concession - PS - Defect or Issue</value><value>Fixed Bid Overage</value><value>Free Hours</value><value>Discounted Rate</value><value>Investment</value><value>Mariana</value><value>Mariana Non-Billable</value><value>Mariana - Billable</value><value>Servicing</value><value>Premium Support</value><value>Internal Productive - Product</value><value>Internal Productive - Sales</value><value>Internal Productive - Customer Support</value><value>Internal Productive</value><value>Internal Non-Productive</value><value>PTO</value></values><description></description><with_notes>false</with_notes><required>false</required><hint></hint><association>slip</association><title>Revenue Category</title><hidden>false</hidden><divider>false</divider></dropdown_cust_field><dropdown_cust_field><divider_text></divider_text><name>rev_group</name><never_copy>false</never_copy><values><value>Revenue Generating</value><value>Non-Revenue Generating</value><value>PTO</value><value>Internal</value><value>Revenue - Client</value><value>Non-Revenue Cilent</value><value>Non-Productive</value><value>PTO</value><value>Productive - Internal</value><value>N/A</value><value>Internal</value></values><description></description><with_notes>false</with_notes><required>false</required><hint></hint><association>slip</association><title>Revenue Group</title><hidden>false</hidden><divider>false</divider></dropdown_cust_field><dropdown_cust_field><divider_text></divider_text><name>Revenue_Grouping</name><never_copy>false</never_copy><values><value>Revenue Generating</value><value>Non-Revenue Generating</value><value>PTO</value><value>Internal</value><value>Revenue - Client</value><value>Non-Revenue Cilent</value><value>Non-Productive</value><value>PTO</value><value>Productive - Internal</value><value>N/A</value><value>Internal</value></values><description>Revenue Groupings of Revenue Categories for Mgm Reporting</description><with_notes>false</with_notes><required>false</required><hint></hint><association>projectbillingrule</association><title>Revenue Grouping</title><hidden>false</hidden><divider>false</divider></dropdown_cust_field><dropdown_cust_field><divider_text></divider_text><name>revenue_category</name><never_copy>false</never_copy><values><value>External Billable</value><value>External Billable - Prepay</value><value>External Billable - Prepay/Milestone</value><value>Premium Support</value><value>SSP - License Bundle</value><value>Concession - PS</value><value>Concession - PS - Defect or Issue</value><value>Fixed Bid Overage</value><value>Free Hours</value><value>Discounted Rate</value><value>Investment</value><value>Mariana</value><value>Mariana Non-Billable</value><value>Mariana - Billable</value><value>Servicing</value><value>Premium Support</value><value>Internal Productive - Product</value><value>Internal Productive - Sales</value><value>Internal Productive - Customer Support</value><value>Internal Productive</value><value>Internal Non-Productive</value><value>PTO</value></values><description>Revenue Category for Mgmt Reporting</description><with_notes>false</with_notes><required>false</required><hint>Ask Joan or else</hint><association>projectbillingrule</association><title>Revenue Category</title><hidden>false</hidden><divider>false</divider></dropdown_cust_field><schedule_script><custom_fields><custom_field>revenue_category</custom_field><custom_field>rev_cat</custom_field><custom_field>rev_group</custom_field><custom_field>Revenue_Grouping</custom_field><custom_field>brScriptProcessed</custom_field></custom_fields><name>add_br_details_to_charges.js</name><comments></comments><libraries></libraries><entrance_function>main</entrance_function><parameters></parameters><__is_linked>true</__is_linked><code><![CDATA[function main() {
+    // Get All Active Projects
+    var notprocessedcharges = get_recent_charges();
+    NSOA.meta.log('debug', JSON.stringify(notprocessedcharges));
+    //var uniquebrsobj = create_unique_brs_obj(notprocessedcharges);
+    var uniquebrsarr = create_unique_brs_arr(notprocessedcharges);
+    NSOA.meta.log('debug', JSON.stringify(uniquebrsarr));
+    var arraycheck = create_br_mapping(uniquebrsarr);
+    NSOA.meta.log('debug', 'Array check: '+ JSON.stringify(arraycheck));
+    var modify_array = blend_arrays(notprocessedcharges,arraycheck);
+    NSOA.meta.log('debug', 'To be modified: '+ JSON.stringify(modify_array));
+    var chargeschanged = modify_charges(modify_array);
+    
+}
+
+function get_active_projects(){
+    var readRequest = [], resultsJSON, resultsArray_JSON = [];
+    var increment = 0, pageSize = 1000, limitReached = false;
+    var project_conditions = new NSOA.record.oaProject();
+    project_conditions.active = '1';    
+
+    while (limitReached === false) {
+
+        readRequest[0] = {
+            type: "Project",
+            fields: "id",
+            method: "equal to",
+            objects: [project_conditions],
+            attributes: [{
+                name: "limit",
+                value: increment + "," + pageSize
+            }]
+        };
+
+
+        var resultsArray = NSOA.wsapi.read(readRequest);
+
+        if (!resultsArray || !resultsArray[0] || !resultsArray[0].objects) {
+            // An unexpected error has occurred!
+        } else if (resultsArray[0].errors !== null && resultsArray[0].errors.length > 0) {
+            // There are errors to handle!
+        } else {
+            // Process the response as expected
+
+            resultsArray[0].objects.forEach(function (o) {
+                resultsJSON = {
+                    id: o.id
+                };
+                resultsArray_JSON.push(resultsJSON);
+            });
+
+        }
+
+        if (isEmpty(resultsArray[0].objects) || resultsArray[0].objects.length < pageSize) limitReached = true;
+        increment += pageSize;
+    }
+   
+    return resultsArray_JSON;
+}
+
+function get_billing_rules(projects){
+    var readRequest = [], resultsJSON, resultsArray_JSON = [];
+    var increment = 0, pageSize = 1000, limitReached = false;
+    var br_conditions = new NSOA.record.oaProjectbillingrule();
+    br_conditions.projectid = projects;    
+
+    while (limitReached === false) {
+
+        readRequest[0] = {
+            type: "Projectbillingrule",
+            fields: "id, revenue_category__c, Revenue_Grouping__c",
+            method: "equal to",
+            objects: [br_conditions],
+            attributes: [{
+                name: "limit",
+                value: increment + "," + pageSize
+            }]
+        };
+
+
+        var resultsArray = NSOA.wsapi.read(readRequest);
+
+        if (!resultsArray || !resultsArray[0] || !resultsArray[0].objects) {
+            // An unexpected error has occurred!
+        } else if (resultsArray[0].errors !== null && resultsArray[0].errors.length > 0) {
+            // There are errors to handle!
+        } else {
+            // Process the response as expected
+
+            resultsArray[0].objects.forEach(function (o) {
+                resultsJSON = {
+                    id: o.id,
+                    rev_cat: o.revenue_category__c,
+                    rev_group: o.Revenue_Grouping__c
+                    
+                };
+                resultsArray_JSON.push(resultsJSON);
+            });
+
+        }
+
+        if (isEmpty(resultsArray[0].objects) || resultsArray[0].objects.length < pageSize) limitReached = true;
+        increment += pageSize;
+    }
+   
+    return resultsArray_JSON;
+}
+
+function get_recent_charges(){
+    var readRequest = [], resultsJSON, resultsArray_JSON = [];
+    var increment = 0, pageSize = 1000, limitReached = false;
+    var slip_conditions = new NSOA.record.oaSlip();
+    slip_conditions.brScriptProcessed__c = '0';    
+	var not_condition = new NSOA.record.oaSlip();
+    not_condition.project_billing_ruleid ='';
+    while (limitReached === false) {
+
+        readRequest[0] = {
+            type: "Slip",
+            fields: "id, project_billing_ruleid",
+            method: "not equal to, not equal to",
+            objects: [slip_conditions, not_condition],
+            attributes: [{
+                name: "limit",
+                value: increment + "," + pageSize
+            }]
+        };
+
+
+        var resultsArray = NSOA.wsapi.read(readRequest);
+
+        if (!resultsArray || !resultsArray[0] || !resultsArray[0].objects) {
+            // An unexpected error has occurred!
+        } else if (resultsArray[0].errors !== null && resultsArray[0].errors.length > 0) {
+            // There are errors to handle!
+        } else {
+            // Process the response as expected
+
+            resultsArray[0].objects.forEach(function (o) {
+                resultsJSON = {
+                    id: o.id,
+                    brid: o.project_billing_ruleid,
+                    rev_cat: '',
+                    rev_group: ''
+                };
+                resultsArray_JSON.push(resultsJSON);
+            });
+        }
+
+        if (isEmpty(resultsArray[0].objects) || resultsArray[0].objects.length < pageSize) limitReached = true;
+        increment += pageSize;
+    }
+   
+    return resultsArray_JSON;
+}
+
+function create_unique_brs_obj(array){
+    var newarray = [];
+    for(var i =0;i<array.length;i++){
+        if(newarray.indexOf(array[i].brid) !== -1){
+            //NSOA.meta.log('debug', 'Duplicate found');
+        }else if(array[i].brid === null ||array[i].brid === ""){
+            //NSOA.meta.log('debug', 'Null value found...');
+        }else{
+            var br = new NSOA.record.oaProjectbillingrule();
+    		br.id = array[i].brid;
+            newarray.push(br);
+            //NSOA.meta.log('debug', 'Unique Billing Rule found: '+ array[i].brid);
+        }
+        
+    }
+    return newarray;
+}
+
+function create_unique_brs_arr(array){
+    var newarray = [];
+    for(var i =0;i<array.length;i++){
+        if(newarray.indexOf(array[i].brid) !== -1){
+            //NSOA.meta.log('debug', 'Duplicate found');
+        }else if(array[i].brid === null ||array[i].brid === ""){
+            //NSOA.meta.log('debug', 'Null value found...');
+        }else{
+            newarray.push(array[i].brid);
+            //NSOA.meta.log('debug', 'Unique Billing Rule found: '+ array[i].brid);
+        }
+        
+    }
+    return newarray;
+}
+
+
+function create_br_mapping(array){
+    var mappingarray = [];
+	var searcharrays = splitArrayIntoChunksOfLen(array, 1000);
+    for (var i=0;i<searcharrays.length;i++){
+        var objarray = [];
+        var method = 'equal to';
+        for (var j=0;j<searcharrays[i].length;j++){
+            var newbr = new NSOA.record.oaProjectbillingrule();
+    		newbr.id = searcharrays[i][j];
+            objarray.push(newbr);
+            if(j>0){
+                method = method + ', or equal to';
+            }else{}
+        }
+        NSOA.meta.log('debug', 'Objarray after for: '+ JSON.stringify(objarray));
+        // Define the read request
+        var brreadRequest = {
+            type : 'Projectbillingrule',
+            method : method, // return only records that match search criteria
+            fields : 'id, revenue_category__c, Revenue_Grouping__c', // specify fields to be returned
+            attributes : [ // Limit attribute is required; type is Attribute
+                {
+                    name : 'limit',
+                    value : '1000'
+                }
+            ],
+            objects :  // One object with search criteria; type implied by rr type
+                objarray
+
+        };
+        // Invoke the read call
+        var brresults = NSOA.wsapi.read(brreadRequest);
+        var resultsJSON = [];
+         if (!brresults || !brresults[0] || !brresults[0].objects) {
+            // An unexpected error has occurred!
+        } else if (brresults[0].errors !== null && brresults[0].errors.length > 0) {
+            // There are errors to handle!
+        } else {
+            // Process the response as expected
+            brresults[0].objects.forEach(function (o) {
+                resultsJSON = {
+                    id: o.id,
+                    rev_cat: o.revenue_category__c,
+                    rev_group: o.Revenue_Grouping__c
+                };
+                mappingarray.push(resultsJSON);
+            });
+        }
+        //NSOA.meta.log('debug', 'Method: '+ method);
+        NSOA.meta.log('debug', 'BR Results pre concat: '+ JSON.stringify(brresults));
+    }
+    return mappingarray;
+    
+}
+
+function blend_arrays(arr1,arr2){
+    NSOA.meta.log('debug', 'Blend Arrays started');
+    for(var i=0; i<arr1.length; i++){        
+        for (var j=0;  j<arr2.length; j++){  
+            if(arr1[i].brid === arr2[j].id){
+                arr1[i].rev_cat = arr2[j].rev_cat;
+                arr1[i].rev_group = arr2[j].rev_group;
+                //NSOA.meta.log('debug','Records Matched.');
+                break;
+            }else{//NSOA.meta.log('debug', 'arr1: '+ arr1[i].brid +' arr2: '+ arr2[j].id + ', '+ arr2[j].rev_cat);
+                continue;}
+            continue;
+        }
+    }
+    return arr1;
+}
+
+function modify_charges(array){
+    NSOA.meta.log('debug', 'Modify process started...');
+	var searcharrays = splitArrayIntoChunksOfLen(array, 1000);
+    for (var i=0;i<searcharrays.length;i++){
+        var objarray = [];
+        var method = 'equal to';
+        for (var j=0;j<searcharrays[i].length;j++){
+            var newslip = new NSOA.record.oaSlip();
+    		newslip.id = searcharrays[i][j].id;
+            newslip.rev_cat__c = searcharrays[i][j].rev_cat;
+            newslip.rev_group__c = searcharrays[i][j].rev_group;
+            newslip.brScriptProcessed__c = '1';
+            objarray.push(newslip);
+
+        }
+        NSOA.meta.log('debug', 'Slip Objarray after for: '+ JSON.stringify(objarray));
+        var attributes = [{name:"update_custom",value:"1"}];
+		var results = NSOA.wsapi.modify(attributes, objarray);
+         if (!results || !results[0] || !results[0].objects) {
+            // An unexpected error has occurred!
+        } else if (results[0].errors !== null && results[0].errors.length > 0) {
+            // There are errors to handle!
+        } else {
+           NSOA.meta.log('debug', i+1 + 'array has been processed...');
+        }
+
+    }
+}
+                            
+function splitArrayIntoChunksOfLen(arr, len) {
+  var chunks = [], i = 0, n = arr.length;
+  while (i < n) {
+    chunks.push(arr.slice(i, i += len));
+  }
+  return chunks;
+}
+
+function arrayObjectIndexOf(myArray, searchTerm, property) {
+    for(var i = 0, len = myArray.length; i < len; i++) {
+        if (myArray[i].property === searchTerm) return i;
+    }
+    return -1;
+}
+
+function isEmpty(value) {
+    if (value === null) {
+        return true;
+    } else if (value === undefined) {
+        return true;
+    } else if (value === '') {
+        return true;
+    } else if (value === ' ') {
+        return true;
+    } else if (value === 'null') {
+        return true;
+    } else {
+        return false;
+    }
+}]]></code></schedule_script></objects><version>1.1</version><title>Add BR fields to charges</title><description>Looks at charges that have not yet been processed by the script and populates 2 custom dropdown fields based on what is set on the billing rule that created the charge.</description></platform_solution>

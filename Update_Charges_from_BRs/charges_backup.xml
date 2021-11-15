@@ -1,0 +1,177 @@
+<platform_solution><objects><library_script><parameters></parameters><custom_fields></custom_fields><__is_linked>true</__is_linked><name>chargelib.js</name><libraries></libraries><comments></comments><code><![CDATA[function get_charges(record){	    
+    // Find the charges for this billing rule
+    var charges = new NSOA.record.oaSlip();
+    charges.project_billing_ruleid = record; // Need to specify the internal id
+    charges.brScriptProcessed__c = '1';
+    
+    // Define the read request
+    var readRequest = {
+        type : 'Slip',
+        method : 'equal to', // return only records that match search criteria
+        fields : 'id, brScriptProcessed__c', // specify fields to be returned
+        attributes : [ // Limit attribute is required; type is Attribute
+            {
+                name : 'limit',
+                value : '1000'
+            }
+        ],
+        objects : [ 
+            charges
+        ]
+    };
+    // Invoke the read call
+    var results = NSOA.wsapi.read(readRequest);
+    return results;
+    
+}
+
+function reset_flag(array){
+    var attributes = [{name:"update_custom",value:"1"}];
+    var modifyarray = [];
+    for(var i=0; i < array[0].objects.length; i++){
+        var charge = new NSOA.record.oaSlip();
+        charge.id = array[0].objects[i].id;
+        charge.brScriptProcessed__c = '0';
+        modifyarray.push(charge);
+    }
+    NSOA.meta.log('debug', JSON.stringify(modifyarray));
+    var results = NSOA.wsapi.modify(attributes, modifyarray);
+    return results;
+
+}
+
+exports.reset_flag=reset_flag;
+exports.get_charges=get_charges;]]></code></library_script><form_script><custom_fields></custom_fields><name>ff_update_associated_charges.js</name><event>after_save</event><libraries></libraries><comments></comments><entrance_function>main</entrance_function><parameters></parameters><__is_linked>true</__is_linked><association>edit_project_billing_rule_fixed</association><code><![CDATA[function main(type) {
+	var oldr = NSOA.form.getOldRecord();
+    var newr = NSOA.form.getNewRecord();
+    var id = newr.id;
+    var oldrevcat = oldr.revenue_category__c;
+    var newrevcat = newr.revenue_category__c;
+    var oldrevgroup = oldr.Revenue_Grouping__c;
+    var newrevgroup = newr.Revenue_Grouping__c;
+    
+    if(oldrevcat !== newrevcat || oldrevgroup !== newrevgroup){
+        set_flag(id);
+    }else{
+        return;
+    }
+}
+
+function set_flag(id){
+    // Modify customers email address
+    var billingrule = new NSOA.record.oaProjectbillingrule();
+    billingrule.id = id;
+    billingrule.updateCharges__c = '1';
+    // Not attributes required
+    var attributes = [{name:"update_custom",value:"1"}];
+
+    // Invoke the modify call
+    var results = NSOA.wsapi.modify(attributes, [billingrule]);
+}]]></code></form_script><form_script><custom_fields></custom_fields><name>time_charges_update.js</name><event>after_save</event><libraries><library>chargelib.js</library></libraries><comments></comments><entrance_function>main</entrance_function><parameters></parameters><__is_linked>true</__is_linked><association>edit_project_billing_rule_time</association><code><![CDATA[function main(type) {
+	var oldr = NSOA.form.getOldRecord();
+    var newr = NSOA.form.getNewRecord();
+    var id = newr.id;
+    var oldrevcat = oldr.revenue_category__c;
+    var newrevcat = newr.revenue_category__c;
+    var oldrevgroup = oldr.Revenue_Grouping__c;
+    var newrevgroup = newr.Revenue_Grouping__c;
+    
+    if(oldrevcat !== newrevcat || oldrevgroup !== newrevgroup){
+        set_flag(id);
+    }else{
+        return;
+    }
+}
+
+function set_flag(id){
+    // Modify customers email address
+    var billingrule = new NSOA.record.oaProjectbillingrule();
+    billingrule.id = id;
+    billingrule.updateCharges__c = '1';
+    // Not attributes required
+    var attributes = [{name:"update_custom",value:"1"}];
+
+    // Invoke the modify call
+    var results = NSOA.wsapi.modify(attributes, [billingrule]);
+}]]></code></form_script><schedule_script><custom_fields></custom_fields><name>update_charges_where_br_changed.js</name><comments></comments><libraries><library>chargelib.js</library></libraries><entrance_function>main</entrance_function><parameters></parameters><__is_linked>true</__is_linked><code><![CDATA[function main() {
+    // PUT YOUR CODE HERE
+    var changedbrs = find_billing_rules();
+    NSOA.meta.log('debug', 'Changed billing rules ' + JSON.stringify(changedbrs));
+    var chargechanges = work_with_charges(changedbrs);
+}
+
+function find_billing_rules(){
+    var readRequest = [], resultsJSON, resultsArray_JSON = [];
+    var increment = 0, pageSize = 1000, limitReached = false;
+    var br_conditions = new NSOA.record.oaProjectbillingrule();
+    br_conditions.updateCharges__c = '1';    
+    while (limitReached === false) {
+
+        readRequest[0] = {
+            type: "Projectbillingrule",
+            fields: "id",
+            method: "equal to",
+            objects: [br_conditions],
+            attributes: [{
+                name: "limit",
+                value: increment + "," + pageSize
+            }]
+        };
+
+
+        var resultsArray = NSOA.wsapi.read(readRequest);
+
+        if (!resultsArray || !resultsArray[0] || !resultsArray[0].objects) {
+            // An unexpected error has occurred!
+        } else if (resultsArray[0].errors !== null && resultsArray[0].errors.length > 0) {
+            // There are errors to handle!
+        } else {
+            // Process the response as expected
+
+            resultsArray[0].objects.forEach(function (o) {
+                resultsJSON = {
+                    id: o.id
+                };
+                resultsArray_JSON.push(resultsJSON);
+            });
+        }
+
+        if (isEmpty(resultsArray[0].objects) || resultsArray[0].objects.length < pageSize) limitReached = true;
+        increment += pageSize;
+    }
+   
+    return resultsArray_JSON;
+}
+
+function work_with_charges(array){
+
+    for(var i = 0;i<array.length;i++){
+        try{
+        var chargelib = require('chargelib');
+            var charges = chargelib.get_charges(array[i].id);
+            NSOA.meta.log('debug', 'Charges for this br ' + array[i].id + ' : '+ JSON.stringify(charges));
+            var modresults = chargelib.reset_flag(charges);
+            NSOA.meta.log('debug', 'Upd results: '+ JSON.stringify(modresults));
+            var afterupd = chargelib.get_charges(array[i].id); 
+            NSOA.meta.log('debug', 'Charges for this br after update: '+ JSON.stringify(afterupd));
+        }catch(error){
+            NSOA.meta.log('error', error);
+            }
+    }
+}
+
+function isEmpty(value) {
+    if (value === null) {
+        return true;
+    } else if (value === undefined) {
+        return true;
+    } else if (value === '') {
+        return true;
+    } else if (value === ' ') {
+        return true;
+    } else if (value === 'null') {
+        return true;
+    } else {
+        return false;
+    }
+}]]></code></schedule_script></objects><version>1.1</version><title>Charges_Backup</title><description></description></platform_solution>

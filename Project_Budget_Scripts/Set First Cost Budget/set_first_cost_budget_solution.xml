@@ -1,0 +1,58 @@
+<platform_solution><objects><checkbox_cust_field><divider_text></divider_text><name>firstCostBudgetSet</name><never_copy>false</never_copy><description></description><with_notes>false</with_notes><checked>false</checked><hint></hint><hidden>true</hidden><title>First Cost Budget Set</title><association>project</association><divider>false</divider></checkbox_cust_field><numeric_cust_field><never_copy>false</never_copy><size>12</size><required>false</required><association>project</association><divider_text></divider_text><unique>false</unique><decimal_positions>2</decimal_positions><name>prjCostBudget</name><description></description><with_notes>false</with_notes><hint></hint><hidden>false</hidden><title>Cost Budget</title><divider>false</divider></numeric_cust_field><schedule_script><custom_fields><custom_field>prjCostBudget</custom_field><custom_field>firstCostBudgetSet</custom_field></custom_fields><name>set_first_cost_budget.js</name><comments></comments><libraries></libraries><entrance_function>main</entrance_function><parameters></parameters><__is_linked>true</__is_linked><code><![CDATA[function main() {
+    var update_custom = [{name:"update_custom",value:"1"}];
+    var projs = new NSOA.record.oaProject();
+    projs.prjCostBudget__c = 0;
+    projs.firstCostBudgetSet__c ='1';
+    projs.active = '0';
+    // Define the read request
+    var projreadRequest = {
+        type : 'Project',
+        method : 'not equal to', // return only records that match search criteria
+        fields : 'id, prjCostBudget__c', // specify fields to be returned
+        attributes : [ // Limit attribute is required; type is Attribute
+            {
+                name : 'limit',
+                value : '1000'
+            }
+        ],
+        objects : [ // One object with search criteria; type implied by rr type
+            projs
+        ]
+    };
+    // Invoke the read call
+    var projresults = NSOA.wsapi.read(projreadRequest);
+    NSOA.meta.log('debug', JSON.stringify(projresults));
+    for(var a=0; a<projresults[0].objects.length; a++){
+        try{
+            var pbgs = new NSOA.record.oaProjectBudgetGroup();
+			pbgs.approval_status = 'O';
+            pbgs.projectid = projresults[0].objects[a].id;
+            // Define the read request
+            var pbgreadRequest = {
+                type : 'ProjectBudgetGroup',
+                method : 'equal to', // return only records that match search criteria
+                fields : 'id, projectid, approval_status', // specify fields to be returned
+                attributes : [ // Limit attribute is required; type is Attribute
+                    {
+                        name : 'limit',
+                        value : '1'
+                    }
+                ],
+                objects : [ // One object with search criteria; type implied by rr type
+                    pbgs
+                ]
+            };
+            var pbgresults = NSOA.wsapi.read(pbgreadRequest);
+    		NSOA.meta.log('debug', JSON.stringify(pbgresults));
+            var pbgupd = new NSOA.record.oaProjectBudgetGroup();
+            pbgupd.id = pbgresults[0].objects[0].id;
+            pbgupd.total_expected_cost = projresults[0].objects[a].prjCostBudget__c;
+            var pbgupdresults = NSOA.wsapi.modify(update_custom, [pbgupd]);
+            var prjupd = new NSOA.record.oaProject();
+            prjupd.id = projresults[0].objects[a].id;
+            prjupd.firstCostBudgetSet__c = '1';
+            var prjupdresults = NSOA.wsapi.modify(update_custom, [prjupd]);
+            
+        }catch(error){NSOA.meta.log('debug',error);}
+    }
+}]]></code></schedule_script></objects><version>1.1</version><title>set_first_cost_budget</title><description></description></platform_solution>

@@ -1,0 +1,806 @@
+<platform_solution><objects><library_script><parameters></parameters><custom_fields></custom_fields><__is_linked>true</__is_linked><name>date_utils.js</name><libraries></libraries><comments></comments><code><![CDATA[// Date utils
+// Expected OpenAir date format is a string of form: "YYYY-MM-DD 0:0:0"
+
+
+function date_to_string(date) {
+    var d = new Date(date);
+    var month = (d.getMonth() + 1).toString();
+    var day = d.getDate().toString();
+    var year = d.getFullYear();
+
+    // add leading zeros if necessary
+    if (month.length < 2)
+        month = '0' + month;
+    if (day.length < 2)
+        day = '0' + day;
+
+    return [year, month, day].join('-') + ' 0:0:0';
+}
+
+
+function string_to_date(date_string) {
+    var aYMD = date_string.split(' ');
+    aYMD = aYMD[0].split('-');
+    return new Date(aYMD[0], aYMD[1] - 1, aYMD[2]);
+}
+
+
+function get_day_difference(start_date_string, end_date_string) {
+    var start_date = string_to_date(start_date_string);
+    var end_date = string_to_date(end_date_string);
+    var diff_time = end_date - start_date;
+    return Math.ceil(diff_time / (1000 * 60 * 60 * 24));
+}
+
+
+function get_working_day_difference(start_date_string, end_date_string) {
+    // source: https://www.codegrepper.com/code-examples/javascript/exclude+weekends+in+javascript+date+calculation
+    var startDate = string_to_date(start_date_string);
+    var endDate = string_to_date(end_date_string);
+    var elapsed, daysBeforeFirstSaturday, daysAfterLastSunday;
+    var ifThen = function (a, b, c) {
+        return a === b ? c : a;
+    };
+
+    elapsed = endDate - startDate;
+    elapsed /= 86400000;
+
+    daysBeforeFirstSunday = (7 - startDate.getDay()) % 7;
+    daysAfterLastSunday = endDate.getDay();
+
+    elapsed -= (daysBeforeFirstSunday + daysAfterLastSunday);
+    elapsed = (elapsed / 7) * 5;
+    elapsed += ifThen(daysBeforeFirstSunday - 1, -1, 0) + ifThen(daysAfterLastSunday, 6, 5);
+
+    return Math.ceil(elapsed);
+}
+
+
+function add_days(date_string, days_int) {
+    var date = string_to_date(date_string);
+    date.setDate(date.getDate() + days_int);
+    return date;
+}
+
+
+function add_working_days(date_string, days_int) {
+    // source: https://gist.github.com/psdtohtml5/7000529
+    var date = Dates.string_to_date(date_string);
+    var day = date.getDay();
+    date.setDate(date.getDate() + days_int + (day === 6 ? 2 : +!day) + (Math.floor((days_int - 1 + (day % 6 || 1)) / 5) * 2));
+    return date;
+}
+
+
+function get_days_to_weekday(date_string) {
+    var date = string_to_date(date_string);
+    var day = date.getDay();
+    var day_shift = 0;
+    if (day === 0) {  // Sunday
+        day_shift = 1;
+    }
+    if (day === 6) {  // Saturday
+        day_shift = 2;
+    }
+    return day_shift;
+}
+
+
+// make functions available to other scripts
+exports.date_to_string = date_to_string;
+exports.string_to_date = string_to_date;
+exports.get_day_difference = get_day_difference;
+exports.get_working_day_difference = get_working_day_difference;
+exports.add_days = add_days;
+exports.add_working_days = add_working_days;
+exports.get_days_to_weekday = get_days_to_weekday;]]></code></library_script><text_parameter><__is_linked>true</__is_linked><field_size>25</field_size><name>copy_queue_id</name><max_length>25</max_length><description>Internal ID for Issue Category of Copy Queue</description></text_parameter><schedule_script><custom_fields></custom_fields><name>create_copy_queue.js</name><comments></comments><libraries></libraries><entrance_function>main</entrance_function><parameters><parameter>copy_queue_id</parameter></parameters><__is_linked>true</__is_linked><code><![CDATA[function main() {
+    var recordsinqueue = check_queue();
+    NSOA.meta.log('debug', JSON.stringify(recordsinqueue));
+    var tasks = set_top_parent(recordsinqueue);
+    NSOA.meta.log('debug', 'Tasks: ' + JSON.stringify(tasks));
+    for (var i = 0; i < recordsinqueue.length; i++) {
+        var copyfromtasks = get_tasks_by_top(recordsinqueue[i].copyFrom);
+        var copytotasks = get_tasks_by_top(recordsinqueue[i].copyTo);
+        NSOA.meta.log('debug', 'Tasks to copy from: ' + JSON.stringify(copyfromtasks) + ' Tasks to copy to: ' + JSON.stringify(copytotasks));
+        //Need to loop through copy from tasks and then get the associated budget records. Then need to create the PBR and PBT for the current 'Open' Project budget on copy to project
+        var fullcopy = blend_arrays(copytotasks, copyfromtasks);
+        NSOA.meta.log('debug', 'Array with both IDs: ' + JSON.stringify(fullcopy));
+        var copy = clone_budget_records(fullcopy);
+        NSOA.meta.log('debug', JSON.stringify(copy));        
+    }
+    var deletequeue = delete_queue(recordsinqueue);
+}
+
+function delete_queue(array){
+    for (var i = 0; i<array.length; i++){
+        // Delete customer with internal id 66
+        var issue = new NSOA.record.oaIssue();
+        issue.id = array[i].id;
+        // Invoke the delete call
+        var results = NSOA.wsapi.delete([issue]);
+    }
+    return;
+        
+}
+    
+
+
+function clone_budget_records(array) {
+    var pbrarray = [];
+    var pbrjson;
+    var frompbg = new NSOA.record.oaProjectBudgetGroup();
+    frompbg.approval_status = 'O';
+    frompbg.projectid = array[0].fromPrj;
+    // Define the read request
+    var frompbgreadRequest = {
+        type: 'ProjectBudgetGroup',
+        method: 'equal to', // return only records that match search criteria
+        fields: 'id', // specify fields to be returned
+        attributes: [ // Limit attribute is required; type is Attribute
+            {
+                name: 'limit',
+                value: '1'
+            }
+        ],
+        objects: [ // One object with search criteria; type implied by rr type
+            frompbg
+        ]
+    };
+    // Invoke the read call
+    var frompbgresults = NSOA.wsapi.read(frompbgreadRequest);
+    var frompbgid = frompbgresults[0].objects[0].id;
+    var topbg = new NSOA.record.oaProjectBudgetGroup();
+    topbg.approval_status = 'O';
+    topbg.projectid = array[0].project;
+    // Define the read request
+    var topbgreadRequest = {
+        type: 'ProjectBudgetGroup',
+        method: 'equal to', // return only records that match search criteria
+        fields: 'id', // specify fields to be returned
+        attributes: [ // Limit attribute is required; type is Attribute
+            {
+                name: 'limit',
+                value: '1'
+            }
+        ],
+        objects: [ // One object with search criteria; type implied by rr type
+            topbg
+        ]
+    };
+    // Invoke the read call
+    var topbgresults = NSOA.wsapi.read(topbgreadRequest);
+    var topbgid = topbgresults[0].objects[0].id;
+    NSOA.meta.log('debug', 'Copying from Budget: ' + frompbgid + ", To Budget: " + topbgid + " From Project: " + array[0].fromPrj + " Copy From: " + array[0].copyFrom);
+    for (var i = 0; i < array.length; i++) {
+        //NSOA.meta.log('debug', 'something');
+        //Get Project Budget Rule for this task
+        var foundpbr = find_pbr(array[0].fromPrj, array[i].copyFrom, frompbgid);
+        NSOA.meta.log('debug', 'PBR for this task ' + JSON.stringify(foundpbr) + ' Task to copy to: '+ array[i].id);
+        if (!foundpbr || !foundpbr[0] || !foundpbr[0].objects) {
+            foundpbr.forEach(function(o) {
+                /*if(arrayObjectIndexOf(pbrarray,this.id,'id'))*/
+                {
+                    pbrjson = {
+                        id: o.id,
+                        date: o.date,
+                        category: o.category,
+                        categoryid: o.categoryid,
+                        customerid: o.customerid,
+                        enddate: o.end_date,
+                        itemid: o.itemid,
+                        job_codeid: o.job_codeid,
+                        notes: o.notes,
+                        period: o.period,
+                        productid: o.productid,
+                        project_taskid: array[i].id,
+                        projectid: array[i].project,
+                        quantity: o.quantity,
+                        rate: o.rate,
+                        start_date: o.start_date,
+                        total: o.total
+                    };
+                    var clonedrule = new NSOA.record.oaProjectBudgetRule();
+                    clonedrule.id = o.id;
+                    clonedrule.date = o.date;
+                    clonedrule.category = o.category;
+                    clonedrule.categoryid = o.categoryid;
+                    //clonedrule.enddate = o.end_date;
+                    clonedrule.itemid = o.itemid;
+                    clonedrule.job_codeid = o.job_codeid;
+                    clonedrule.notes = o.notes;
+                    clonedrule.period = o.period;
+                    clonedrule.productid = o.productid;
+                    clonedrule.project_taskid = array[i].id;
+                    clonedrule.projectid = array[i].project;
+                    clonedrule.quantity = o.quantity;
+                    clonedrule.rate = o.rate;
+                    //clonedrule.start_date = o.start_date;
+                    clonedrule.total = o.total;
+                    clonedrule.project_budget_groupid = topbgid;
+                    clonedrule.customerid = array[i].customer;
+                    // Invoke the add call
+                    var ruleresults = NSOA.wsapi.add([clonedrule]);
+                    // Get the new ID
+                    var ruleid = ruleresults[0].id;
+                    NSOA.meta.log('debug', 'Rule clone result: '+ JSON.stringify(ruleresults));
+                    var pbts = find_pbts(this.id,frompbgid,array[i].copyFrom,array[i].fromPrj,array[i].project,array[i].id,ruleid,topbgid,array[i].customer);
+                    NSOA.meta.log('debug', 'The PBTs to copy for this rule: ' + JSON.stringify(pbts));
+                    // Invoke the add call
+                    var txnresults = NSOA.wsapi.add(pbts);
+                    NSOA.meta.log('debug', 'PBT add results: ' + JSON.stringify(txnresults));
+                    // Get the new ID
+                    var txnid = txnresults[0].id;
+                    pbrarray.push(pbrjson);
+                }
+                //else{NSOA.meta.log('debug', 'No value to add...');}
+            });
+        } else {
+            //pbrarray.push(foundpbr);
+        }
+    }
+    return pbrarray;
+
+
+}
+
+function find_pbts(pbrid, pbgid, task, project, newprj, newtask, newpbr, newpbg, newcustomer){
+NSOA.meta.log('debug', 'Find PBT function Started...');
+    var readRequest = [],
+        resultsJSON,
+        resultsArray_JSON = [],
+        pbtsarray = [];
+    var increment = 0,
+        pageSize = 1000,
+        limitReached = false;
+    var frompbr = new NSOA.record.oaProjectBudgetTransaction();
+    frompbr.project_budget_groupid = pbgid;
+    frompbr.project_taskid = task;
+    frompbr.project_id = project;
+    frompbr.project_budget_ruleid = pbrid; 
+    NSOA.meta.log('debug', 'PBG - ' + pbgid + ' Task - ' + task + ' Project - ' + project);
+    while (limitReached === false) {
+
+        readRequest[0] = {
+            type: "ProjectBudgetTransaction",
+            fields: "id, date,category,categoryid,customerid,itemid,job_codeid,notes,period,productid,project_taskid,projectid,quantity,rate,total, project_budget_ruleid",
+            method: "equal to",
+            objects: [frompbr],
+            attributes: [{
+                name: "limit",
+                value: increment + "," + pageSize
+            }]
+        };
+
+
+        var resultsArray = NSOA.wsapi.read(readRequest);
+
+        if (!resultsArray || !resultsArray[0] || !resultsArray[0].objects) {
+            // An unexpected error has occurred!
+            NSOA.meta.log('debug', 'Unexpected error');
+        } else if (resultsArray[0].errors !== null && resultsArray[0].errors.length > 0) {
+            // There are errors to handle!
+            NSOA.meta.log('debug', 'PBT errors: ' + resultsArray[0].errors);
+        } else {
+            // Process the response as expected
+
+            resultsArray[0].objects.forEach(function(o) {
+                resultsJSON = {
+                    id: o.id,
+                    date: o.date,
+                    category: o.category,
+                    categoryid: o.categoryid,
+                    customerid: o.customerid,
+                    itemid: o.itemid,
+                    job_codeid: o.job_codeid,
+                    notes: o.notes,
+                    period: o.period,
+                    productid: o.productid,
+                    project_taskid: o.project_taskid,
+                    projectid: o.projectid,
+                    quantity: o.quantity,
+                    rate: o.rate,
+                    total: o.total
+                };
+                resultsArray_JSON.push(resultsJSON);
+                var pbttoclone = new NSOA.record.oaProjectBudgetTransaction();
+                pbttoclone.date = o.date;
+                pbttoclone.category = o.category;
+                pbttoclone.categoryid = o.categoryid;
+                pbttoclone.itemid = o.itemid;
+                pbttoclone.job_codeid = o.job_codeid;
+                pbttoclone.notes = o.notes;
+                pbttoclone.period = o.period;
+                pbttoclone.productid = o.productid;
+                pbttoclone.project_taskid = newtask;
+                pbttoclone.projectid = newprj;
+                pbttoclone.quantity = o.quantity;
+                pbttoclone.rate = o.rate;
+                pbttoclone.total = o.total;
+                pbttoclone.project_budget_ruleid = newpbr;
+                pbttoclone.project_budget_groupid = newpbg;
+                pbttoclone.customerid = newcustomer;
+                pbtsarray.push(pbttoclone);
+            });
+
+        }
+
+        if (isEmpty(resultsArray[0].objects) || resultsArray[0].objects.length < pageSize) limitReached = true;
+        increment += pageSize;
+    }
+
+    return pbtsarray;
+
+
+}
+
+function find_pbr(project, task, pbg) {
+    NSOA.meta.log('debug', 'Find PBR function Started...');
+    var readRequest = [],
+        resultsJSON,
+        resultsArray_JSON = [];
+    var increment = 0,
+        pageSize = 1000,
+        limitReached = false;
+    var frompbr = new NSOA.record.oaProjectBudgetRule();
+    frompbr.project_budget_groupid = pbg;
+    frompbr.project_taskid = task;
+    frompbr.project_id = project;
+    NSOA.meta.log('debug', 'PBG - ' + pbg + ' Task - ' + task + ' Project - ' + project);
+    while (limitReached === false) {
+
+        readRequest[0] = {
+            type: "ProjectBudgetRule",
+            fields: "id, date,category,categoryid,customerid,end_date,itemid,job_codeid,notes,period,productid,project_taskid,projectid,quantity,rate,start_date,total",
+            method: "equal to",
+            objects: [frompbr],
+            attributes: [{
+                name: "limit",
+                value: increment + "," + pageSize
+            }]
+        };
+
+
+        var resultsArray = NSOA.wsapi.read(readRequest);
+
+        if (!resultsArray || !resultsArray[0] || !resultsArray[0].objects) {
+            // An unexpected error has occurred!
+            NSOA.meta.log('debug', 'Unexpected error');
+        } else if (resultsArray[0].errors !== null && resultsArray[0].errors.length > 0) {
+            // There are errors to handle!
+            NSOA.meta.log('debug', 'PBR errors: ' + resultsArray[0].errors);
+        } else {
+            // Process the response as expected
+
+            resultsArray[0].objects.forEach(function(o) {
+                resultsJSON = {
+                    id: o.id,
+                    date: o.date,
+                    category: o.category,
+                    categoryid: o.categoryid,
+                    customerid: o.customerid,
+                    enddate: o.end_date,
+                    itemid: o.itemid,
+                    job_codeid: o.job_codeid,
+                    notes: o.notes,
+                    period: o.period,
+                    productid: o.productid,
+                    project_taskid: o.project_taskid,
+                    projectid: o.projectid,
+                    quantity: o.quantity,
+                    rate: o.rate,
+                    start_date: o.start_date,
+                    total: o.total
+                };
+                resultsArray_JSON.push(resultsJSON);
+            });
+
+        }
+
+        if (isEmpty(resultsArray[0].objects) || resultsArray[0].objects.length < pageSize) limitReached = true;
+        increment += pageSize;
+    }
+
+    return resultsArray_JSON;
+}
+
+function check_queue() {
+    var readRequest = [],
+        resultsJSON, resultsArray_JSON = [];
+    var increment = 0,
+        pageSize = 1000,
+        limitReached = false;
+    var copy_queue_id = NSOA.context.getParameter('copy_queue_id');
+    var queue = new NSOA.record.oaIssue();
+    queue.issue_category_id = copy_queue_id;
+    while (limitReached === false) {
+
+        readRequest[0] = {
+            type: "Issue",
+            fields: "id, project_id, copyFrom__c, copyTo__c",
+            method: "equal to",
+            objects: [queue],
+            attributes: [{
+                name: "limit",
+                value: increment + "," + pageSize
+            }]
+        };
+
+
+        var resultsArray = NSOA.wsapi.read(readRequest);
+
+        if (!resultsArray || !resultsArray[0] || !resultsArray[0].objects) {
+            // An unexpected error has occurred!
+        } else if (resultsArray[0].errors !== null && resultsArray[0].errors.length > 0) {
+            // There are errors to handle!
+        } else {
+            // Process the response as expected
+
+            resultsArray[0].objects.forEach(function(o) {
+                resultsJSON = {
+                    id: o.id,
+                    project: o.project_id,
+                    copyFrom: o.copyFrom__c,
+                    copyTo: o.copyTo__c
+                };
+                resultsArray_JSON.push(resultsJSON);
+            });
+
+        }
+
+        if (isEmpty(resultsArray[0].objects) || resultsArray[0].objects.length < pageSize) limitReached = true;
+        increment += pageSize;
+    }
+
+    return resultsArray_JSON;
+}
+
+function set_top_parent(array) {
+    var attributes = [{
+        name: "update_custom",
+        value: "1"
+    }];
+    var resultsJSON, resultsArray_JSON = [];
+    var projectarray = [];
+    for (var i = 0; i < array.length; i++) {
+        projectarray.push(array[i].project);
+    }
+    for (var a = 0; a < projectarray.length; a++) {
+        var ptask = new NSOA.record.oaProjecttask();
+        ptask.projectid = projectarray[a];
+        ptask.classification = 'T';
+        ptask.is_a_phase = '0';
+        // Define the read request
+        var readRequest = {
+            type: 'Projecttask',
+            method: 'equal to',
+            fields: 'id, name, parentid',
+            attributes: [{
+                name: 'limit',
+                value: '1000'
+            }],
+            objects: [
+                ptask
+            ]
+        };
+        // Invoke the read call
+        var results = NSOA.wsapi.read(readRequest);
+        NSOA.meta.log('debug', 'Set Top Results: ' + JSON.stringify(results));
+        for (var b = 0; b < results[0].objects.length; b++) {
+            NSOA.meta.log('debug', 'Task ID: ' + results[0].objects[b].id + ' Parent: ' + results[0].objects[b].parentid);
+            var firstcheck = check_parent(results[0].objects[b].parentid);
+            NSOA.meta.log('debug', 'First Check Parent: ' + firstcheck[0].parent + ' First Check ID: ' + firstcheck[0].id);
+            if (firstcheck[0].parent !== '0') {
+                var secondcheck = check_parent(firstcheck[0].parent);
+                var modtask2 = new NSOA.record.oaProjecttask();
+                modtask2.id = results[0].objects[b].id;
+                modtask2.topParentId__c = secondcheck[0].id;
+                // Invoke the modify call
+                var modtask2results = NSOA.wsapi.modify(attributes, [modtask2]);
+
+            } else {
+                var modtask = new NSOA.record.oaProjecttask();
+                modtask.id = results[0].objects[b].id;
+                modtask.topParentId__c = firstcheck[0].id;
+                // Invoke the modify call
+                var modtaskresults = NSOA.wsapi.modify(attributes, [modtask]);
+            }
+        }
+        results[0].objects.forEach(function(o) {
+            resultsJSON = {
+                id: o.id,
+                parent: o.parentid,
+                name: o.name
+            };
+            resultsArray_JSON.push(resultsJSON);
+        });
+        return resultsArray_JSON;
+    }
+}
+
+function check_parent(record) {
+    var readRequest = [],
+        resultsJSON, resultsArray_JSON = [];
+    var increment = 0,
+        pageSize = 1000,
+        limitReached = false;
+    var ptasks = new NSOA.record.oaProjecttask();
+    ptasks.id = record;
+    while (limitReached === false) {
+
+        readRequest[0] = {
+            type: "Projecttask",
+            fields: "id, parentid",
+            method: "equal to",
+            objects: [ptasks],
+            attributes: [{
+                name: "limit",
+                value: increment + "," + pageSize
+            }]
+        };
+
+
+        var resultsArray = NSOA.wsapi.read(readRequest);
+
+        if (!resultsArray || !resultsArray[0] || !resultsArray[0].objects) {
+            // An unexpected error has occurred!
+        } else if (resultsArray[0].errors !== null && resultsArray[0].errors.length > 0) {
+            // There are errors to handle!
+        } else {
+            // Process the response as expected
+
+            resultsArray[0].objects.forEach(function(o) {
+                resultsJSON = {
+                    id: o.id,
+                    parent: o.parentid
+                };
+                resultsArray_JSON.push(resultsJSON);
+            });
+
+        }
+
+        if (isEmpty(resultsArray[0].objects) || resultsArray[0].objects.length < pageSize) limitReached = true;
+        increment += pageSize;
+    }
+
+    return resultsArray_JSON;
+}
+
+function get_tasks_by_top(topparent) {
+    var readRequest = [],
+        resultsJSON, resultsArray_JSON = [];
+    var increment = 0,
+        pageSize = 1000,
+        limitReached = false;
+    var ptasks = new NSOA.record.oaProjecttask();
+    ptasks.topParentId__c = topparent;
+    while (limitReached === false) {
+
+        readRequest[0] = {
+            type: "Projecttask",
+            fields: "id, name, projectid, customerid",
+            method: "equal to",
+            objects: [ptasks],
+            attributes: [{
+                name: "limit",
+                value: increment + "," + pageSize
+            }]
+        };
+
+
+        var resultsArray = NSOA.wsapi.read(readRequest);
+
+        if (!resultsArray || !resultsArray[0] || !resultsArray[0].objects) {
+            // An unexpected error has occurred!
+        } else if (resultsArray[0].errors !== null && resultsArray[0].errors.length > 0) {
+            // There are errors to handle!
+        } else {
+            // Process the response as expected
+
+            resultsArray[0].objects.forEach(function(o) {
+                resultsJSON = {
+                    id: o.id,
+                    name: o.name,
+                    project: o.projectid,
+                    customer: o.customerid,
+                    fromPrj: '',
+                    copyFrom: ''
+                };
+                resultsArray_JSON.push(resultsJSON);
+            });
+
+        }
+
+        if (isEmpty(resultsArray[0].objects) || resultsArray[0].objects.length < pageSize) limitReached = true;
+        increment += pageSize;
+    }
+
+    return resultsArray_JSON;
+
+}
+
+function blend_arrays(arr1, arr2) {
+    NSOA.meta.log('debug', 'Blend Arrays started');
+    for (var i = 0; i < arr1.length; i++) {
+        for (var j = 0; j < arr2.length; j++) {
+            if (arr1[i].name === arr2[j].name) {
+                arr1[i].copyFrom = arr2[j].id;
+                arr1[i].fromPrj = arr2[j].project;
+                //NSOA.meta.log('debug','Records Matched.');
+                break;
+            } else { //NSOA.meta.log('debug', 'arr1: '+ arr1[i].brid +' arr2: '+ arr2[j].id + ', '+ arr2[j].rev_cat);
+                continue;
+            }
+            continue;
+        }
+    }
+    return arr1;
+}
+
+function check_where_parent(record) {
+    var readRequest = [],
+        resultsJSON, resultsArray_JSON = [];
+    var increment = 0,
+        pageSize = 1000,
+        limitReached = false;
+    var ptasks = new NSOA.record.oaProjecttask();
+    ptasks.parentid = record;
+    while (limitReached === false) {
+
+        readRequest[0] = {
+            type: "Projecttask",
+            fields: "id, parentid",
+            method: "equal to",
+            objects: [ptasks],
+            attributes: [{
+                name: "limit",
+                value: increment + "," + pageSize
+            }]
+        };
+
+
+        var resultsArray = NSOA.wsapi.read(readRequest);
+
+        if (!resultsArray || !resultsArray[0] || !resultsArray[0].objects) {
+            // An unexpected error has occurred!
+        } else if (resultsArray[0].errors !== null && resultsArray[0].errors.length > 0) {
+            // There are errors to handle!
+        } else {
+            // Process the response as expected
+
+            resultsArray[0].objects.forEach(function(o) {
+                resultsJSON = {
+                    id: o.id
+                };
+                resultsArray_JSON.push(resultsJSON);
+            });
+
+        }
+
+        if (isEmpty(resultsArray[0].objects) || resultsArray[0].objects.length < pageSize) limitReached = true;
+        increment += pageSize;
+    }
+
+    return resultsArray_JSON;
+
+}
+
+function splitArrayIntoChunksOfLen(arr, len) {
+    var chunks = [],
+        i = 0,
+        n = arr.length;
+    while (i < n) {
+        chunks.push(arr.slice(i, i += len));
+    }
+    return chunks;
+}
+
+function arrayObjectIndexOf(myArray, searchTerm, property) {
+    for (var i = 0, len = myArray.length; i < len; i++) {
+        if (myArray[i].property === searchTerm) return i;
+    }
+    return -1;
+}
+
+function isEmpty(value) {
+    if (value === null) {
+        return true;
+    } else if (value === undefined) {
+        return true;
+    } else if (value === '') {
+        return true;
+    } else if (value === ' ') {
+        return true;
+    } else if (value === 'null') {
+        return true;
+    } else {
+        return false;
+    }
+}]]></code></schedule_script><form_script><custom_fields></custom_fields><name>copy_additional_budget.js</name><event>after_save</event><libraries><library>date_utils.js</library></libraries><comments></comments><entrance_function>main</entrance_function><parameters><parameter>copy_queue_id</parameter></parameters><__is_linked>true</__is_linked><association>project_phase_edit</association><code><![CDATA[function main(type) {
+    //Get Variables for script
+    var newr = NSOA.form.getNewRecord();
+	var currentphase = newr.id;
+    var currentname = newr.name;
+    var copytoprj = newr.copyToPrj__c;
+    var splitcusprj =copytoprj.split(':');
+    var prj = splitcusprj[1];
+    NSOA.meta.log('debug', 'Copy to PRJ: '+ copytoprj+ ' Splitcusprj: '+ JSON.stringify(splitcusprj) + ' Prj: '+ prj);
+    var copybudg = newr.copyBudget__c;
+    var classification = newr.classification;
+    var id_num = newr.id_number;
+    NSOA.meta.log('debug', 'ID num: '+ id_num);
+    if(classification == 'P'){
+        if(copytoprj !== null || copytoprj !== '' && copybudg === true){
+            NSOA.meta.log('debug', 'You\'re in Luck!');
+            var createdid = check_for_phase(currentname,id_num, prj);
+            NSOA.meta.log('debug','The record you are looking for: '+ createdid);
+            var queuerecord = create_queue_record(currentphase,createdid,prj);
+            var reset = reset_record(currentphase);
+           //NSOA.form.confirmation('Your budget copy is queued up. It will be completed soon.');
+        }else{
+            NSOA.meta.log('debug', 'Nothing to do here...');
+            return;
+        }
+    }else{return;}
+}
+
+function check_for_phase(name,idnum, prj){
+    var task = new NSOA.record.oaProjecttask();
+    task.projectid = prj;
+    //task.id_number = idnum;
+    task.name = name;
+    // Define the read request
+    var readRequest = {
+        type : 'Projecttask',
+        method : 'equal to', // return only records that match search criteria
+        fields : 'id', // specify fields to be returned
+        attributes : [ // Limit attribute is required; type is Attribute
+            {
+                name : 'limit',
+                value : '1'
+            }
+        ],
+        objects : [ // One object with search criteria; type implied by rr type
+            task
+        ]
+    };
+    // Invoke the read call
+    var results = NSOA.wsapi.read(readRequest);
+    NSOA.meta.log('debug', JSON.stringify(results));
+    var id = results[0].objects[0].id;
+    return id;
+}
+
+function create_queue_record(copyfrom,copyto,project){
+    var copy_queue = NSOA.context.getParameter('copy_queue_id');
+    var datelib = require('date_utils');
+    var today = new Date();
+    var datestring = datelib.date_to_string(today);
+    // Define a category object to create in OpenAir
+    var budget = new NSOA.record.oaIssue();
+    budget.owner_id = 1;
+    budget.description = 'Waiting to copy ' + copyfrom;
+    budget.copyFrom__c = copyfrom;
+    budget.copyTo__c = copyto;
+    budget.project_id = project;
+    budget.issue_category_id = copy_queue;
+    budget.date = datestring;
+    budget.issue_stage_id = 1;
+    budget.owner_id =1;
+    // Invoke the add call
+    var results = NSOA.wsapi.add([budget]);
+    NSOA.meta.log('debug', JSON.stringify(results));
+    // Get the new ID
+    var id = results[0].id;
+    return id;
+}
+
+function reset_record(record){
+    var attributes = [{name:"update_custom",value:"1"}];
+    var phase = new NSOA.record.oaProjecttask();
+    phase.id = record;
+    phase.copyBudget__c = '0';
+    phase.copyToPrj__c  = '';
+    // Invoke the modify call
+    var results = NSOA.wsapi.modify(attributes, [phase]);
+    return results;
+}]]></code></form_script><text_cust_field><field_size>25</field_size><never_copy>false</never_copy><required>false</required><__is_linked>true</__is_linked><association>issue</association><divider_text></divider_text><unique>false</unique><name>copyFrom</name><description></description><with_notes>false</with_notes><hint></hint><title>Copy From</title><hidden>true</hidden><max_length>25</max_length><divider>false</divider></text_cust_field><text_cust_field><field_size>25</field_size><never_copy>false</never_copy><required>false</required><__is_linked>true</__is_linked><association>issue</association><divider_text></divider_text><unique>false</unique><name>copyTo</name><description></description><with_notes>false</with_notes><hint></hint><title>Copy To</title><hidden>true</hidden><max_length>25</max_length><divider>false</divider></text_cust_field></objects><version>1.1</version><title>Copy_Project_Budget</title><description></description></platform_solution>
