@@ -1,0 +1,90 @@
+<platform_solution><objects><text_cust_field><field_size>25</field_size><never_copy>false</never_copy><required>false</required><association>category_3</association><divider_text></divider_text><unique>false</unique><name>cat3NSProductId</name><description></description><with_notes>false</with_notes><hint></hint><title>NS Product ID</title><hidden>false</hidden><max_length>25</max_length><divider>false</divider></text_cust_field><checkbox_cust_field><divider_text></divider_text><name>picklistCostTypeCreated</name><never_copy>false</never_copy><description></description><with_notes>false</with_notes><checked>false</checked><hint></hint><hidden>false</hidden><title>Picklist Value created?</title><association>product</association><divider>false</divider></checkbox_cust_field><schedule_script><custom_fields><custom_field>picklistCostTypeCreated</custom_field><custom_field>cat3NSProductId</custom_field></custom_fields><name>set_cost_type_picklist.js</name><comments></comments><libraries></libraries><entrance_function>main</entrance_function><parameters></parameters><__is_linked>true</__is_linked><code><![CDATA[function main() {
+    var products = products_to_recreate();
+    if(products !== null){	
+    	create_cat3(products);
+    }else{NSOA.meta.log('info', 'No new products to setup.');}
+    
+}
+
+function products_to_recreate(){
+    var readRequest = [], resultsJSON, resultsArray_JSON = [];
+    var increment = 0, pageSize = 1000, limitReached = false;
+    var nsprod = new NSOA.record.oaProduct();
+    nsprod.netsuite_product_subtype__c = 'For Purchase';
+    var notcreated = new NSOA.record.oaProduct();
+    notcreated.picklistCostTypeCreated__c = '1';
+    while (limitReached === false) {
+
+        readRequest[0] = {
+            type: 'Product',
+            fields: 'id, netsuite_product_id__c, name',
+            method: 'equal to, not equal to',
+            objects: [nsprod, notcreated],
+            attributes: [{
+                name: 'limit',
+                value: increment + ',' + pageSize
+            }]
+        };
+
+
+        var resultsArray = NSOA.wsapi.read(readRequest);
+        
+
+        if (!resultsArray || !resultsArray[0] || !resultsArray[0].objects) {
+            // An unexpected error has occurred!
+            return null;
+        } else if (resultsArray[0].errors !== null && resultsArray[0].errors.length > 0) {
+            // There are errors to handle!
+        } else {
+            // Process the response as expected
+			NSOA.meta.log('debug', 'There are ' + resultsArray[0].objects.length + ' records to process...');
+            resultsArray[0].objects.forEach(function (o) {
+                resultsJSON = {
+                    id: o.id,
+                    name: o.name,
+                    nsid: o.netsuite_product_id__c
+                };
+                resultsArray_JSON.push(resultsJSON);
+            });
+        }
+
+        if (isEmpty(resultsArray[0].objects) || resultsArray[0].objects.length < pageSize) limitReached = true;
+        increment += pageSize;
+    }
+   
+    return resultsArray_JSON;
+}
+
+function create_cat3(array){
+    var update_custom = [{name:"update_custom",value:"1"}];
+	for(var i = 0; i<array.length; i++){
+        var obj = new NSOA.record.oaCategory_3();
+        obj.active = '1';
+        obj.externalid = array[i].id;
+        obj.name = array[i].name;
+        obj.cat3NSProductId__c  = array[i].nsid;
+        // Invoke the add call
+		var addresults = NSOA.wsapi.add([obj]);
+        var updobj = new NSOA.record.oaProduct();
+        updobj.id = array[i].id;
+        updobj.picklistCostTypeCreated__c = '1';
+        // Invoke the modify call
+		var updresults = NSOA.wsapi.modify(update_custom, [updobj]);
+    }
+}
+
+function isEmpty(value) {
+    if (value === null) {
+        return true;
+    } else if (value === undefined) {
+        return true;
+    } else if (value === '') {
+        return true;
+    } else if (value === ' ') {
+        return true;
+    } else if (value === 'null') {
+        return true;
+    } else {
+        return false;
+    }
+}]]></code></schedule_script></objects><version>1.1</version><title>set_cost_type_picklist</title><description></description></platform_solution>

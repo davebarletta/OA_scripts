@@ -18,7 +18,6 @@ function main() {
 
 function delete_queue(array){
     for (var i = 0; i<array.length; i++){
-        // Delete customer with internal id 66
         var issue = new NSOA.record.oaIssue();
         issue.id = array[i].id;
         // Invoke the delete call
@@ -33,114 +32,116 @@ function delete_queue(array){
 function clone_budget_records(array) {
     var pbrarray = [];
     var pbrjson;
-    var frompbg = new NSOA.record.oaProjectBudgetGroup();
-    frompbg.approval_status = 'O';
-    frompbg.projectid = array[0].fromPrj;
-    // Define the read request
-    var frompbgreadRequest = {
-        type: 'ProjectBudgetGroup',
-        method: 'equal to', // return only records that match search criteria
-        fields: 'id', // specify fields to be returned
-        attributes: [ // Limit attribute is required; type is Attribute
-            {
-                name: 'limit',
-                value: '1'
-            }
-        ],
-        objects: [ // One object with search criteria; type implied by rr type
-            frompbg
-        ]
-    };
-    // Invoke the read call
-    var frompbgresults = NSOA.wsapi.read(frompbgreadRequest);
-    var frompbgid = frompbgresults[0].objects[0].id;
-    var topbg = new NSOA.record.oaProjectBudgetGroup();
-    topbg.approval_status = 'O';
-    topbg.projectid = array[0].project;
-    // Define the read request
-    var topbgreadRequest = {
-        type: 'ProjectBudgetGroup',
-        method: 'equal to', // return only records that match search criteria
-        fields: 'id', // specify fields to be returned
-        attributes: [ // Limit attribute is required; type is Attribute
-            {
-                name: 'limit',
-                value: '1'
-            }
-        ],
-        objects: [ // One object with search criteria; type implied by rr type
-            topbg
-        ]
-    };
-    // Invoke the read call
-    var topbgresults = NSOA.wsapi.read(topbgreadRequest);
-    var topbgid = topbgresults[0].objects[0].id;
-    NSOA.meta.log('debug', 'Copying from Budget: ' + frompbgid + ", To Budget: " + topbgid + " From Project: " + array[0].fromPrj + " Copy From: " + array[0].copyFrom);
-    for (var i = 0; i < array.length; i++) {
-        //NSOA.meta.log('debug', 'something');
-        //Get Project Budget Rule for this task
-        var foundpbr = find_pbr(array[0].fromPrj, array[i].copyFrom, frompbgid);
-        NSOA.meta.log('debug', 'PBR for this task ' + JSON.stringify(foundpbr) + ' Task to copy to: '+ array[i].id);
-        if (!foundpbr || !foundpbr[0] || !foundpbr[0].objects) {
-            foundpbr.forEach(function(o) {
-                /*if(arrayObjectIndexOf(pbrarray,this.id,'id'))*/
+    for (var j = 0; j < array.length; j++){
+        var frompbg = new NSOA.record.oaProjectBudgetGroup();
+        frompbg.approval_status = 'O';
+        frompbg.projectid = array[j].fromPrj;
+        // Define the read request
+        var frompbgreadRequest = {
+            type: 'ProjectBudgetGroup',
+            method: 'equal to', // return only records that match search criteria
+            fields: 'id', // specify fields to be returned
+            attributes: [ // Limit attribute is required; type is Attribute
                 {
-                    pbrjson = {
-                        id: o.id,
-                        date: o.date,
-                        category: o.category,
-                        categoryid: o.categoryid,
-                        customerid: o.customerid,
-                        enddate: o.end_date,
-                        itemid: o.itemid,
-                        job_codeid: o.job_codeid,
-                        notes: o.notes,
-                        period: o.period,
-                        productid: o.productid,
-                        project_taskid: array[i].id,
-                        projectid: array[i].project,
-                        quantity: o.quantity,
-                        rate: o.rate,
-                        start_date: o.start_date,
-                        total: o.total
-                    };
-                    var clonedrule = new NSOA.record.oaProjectBudgetRule();
-                    clonedrule.id = o.id;
-                    clonedrule.date = o.date;
-                    clonedrule.category = o.category;
-                    clonedrule.categoryid = o.categoryid;
-                    //clonedrule.enddate = o.end_date;
-                    clonedrule.itemid = o.itemid;
-                    clonedrule.job_codeid = o.job_codeid;
-                    clonedrule.notes = o.notes;
-                    clonedrule.period = o.period;
-                    clonedrule.productid = o.productid;
-                    clonedrule.project_taskid = array[i].id;
-                    clonedrule.projectid = array[i].project;
-                    clonedrule.quantity = o.quantity;
-                    clonedrule.rate = o.rate;
-                    //clonedrule.start_date = o.start_date;
-                    clonedrule.total = o.total;
-                    clonedrule.project_budget_groupid = topbgid;
-                    clonedrule.customerid = array[i].customer;
-                    // Invoke the add call
-                    var ruleresults = NSOA.wsapi.add([clonedrule]);
-                    // Get the new ID
-                    var ruleid = ruleresults[0].id;
-                    NSOA.meta.log('debug', 'Rule clone result: '+ JSON.stringify(ruleresults));
-                    var pbts = find_pbts(this.id,frompbgid,array[i].copyFrom,array[i].fromPrj,array[i].project,array[i].id,ruleid,topbgid,array[i].customer);
-                    NSOA.meta.log('debug', 'The PBTs to copy for this rule: ' + JSON.stringify(pbts));
-                    // Invoke the add call
-                    var txnresults = NSOA.wsapi.add(pbts);
-                    NSOA.meta.log('debug', 'PBT add results: ' + JSON.stringify(txnresults));
-                    // Get the new ID
-                    var txnid = txnresults[0].id;
-                    pbrarray.push(pbrjson);
+                    name: 'limit',
+                    value: '1'
                 }
-                //else{NSOA.meta.log('debug', 'No value to add...');}
-            });
-        } else {
-            //pbrarray.push(foundpbr);
+            ],
+            objects: [ // One object with search criteria; type implied by rr type
+                frompbg
+            ]
+        };
+        // Invoke the read call
+        var frompbgresults = NSOA.wsapi.read(frompbgreadRequest);
+        var frompbgid = frompbgresults[0].objects[0].id;
+        var topbg = new NSOA.record.oaProjectBudgetGroup();
+        topbg.approval_status = 'O';
+        topbg.projectid = array[j].project;
+        // Define the read request
+        var topbgreadRequest = {
+            type: 'ProjectBudgetGroup',
+            method: 'equal to', // return only records that match search criteria
+            fields: 'id', // specify fields to be returned
+            attributes: [ // Limit attribute is required; type is Attribute
+                {
+                    name: 'limit',
+                    value: '1'
+                }
+            ],
+            objects: [ // One object with search criteria; type implied by rr type
+                topbg
+            ]
+        };
+        // Invoke the read call
+        var topbgresults = NSOA.wsapi.read(topbgreadRequest);
+        var topbgid = topbgresults[0].objects[0].id;
+        NSOA.meta.log('debug', 'Copying from Budget: ' + frompbgid + ", To Budget: " + topbgid + " From Project: " + array[0].fromPrj + " Copy From: " + array[0].copyFrom);
+        for (var i = 0; i < array.length; i++) {
+            //NSOA.meta.log('debug', 'something');
+            //Get Project Budget Rule for this task
+            var foundpbr = find_pbr(array[0].fromPrj, array[i].copyFrom, frompbgid);
+            NSOA.meta.log('debug', 'PBR for this task ' + JSON.stringify(foundpbr) + ' Task to copy to: '+ array[i].id);
+            if (!foundpbr || !foundpbr[0] || !foundpbr[0].objects) {
+                foundpbr.forEach(function(o) {
+                    /*if(arrayObjectIndexOf(pbrarray,this.id,'id'))*/
+                    {
+                        pbrjson = {
+                            id: o.id,
+                            date: o.date,
+                            category: o.category,
+                            categoryid: o.categoryid,
+                            customerid: o.customerid,
+                            enddate: o.end_date,
+                            itemid: o.itemid,
+                            job_codeid: o.job_codeid,
+                            notes: o.notes,
+                            period: o.period,
+                            productid: o.productid,
+                            project_taskid: array[i].id,
+                            projectid: array[i].project,
+                            quantity: o.quantity,
+                            rate: o.rate,
+                            start_date: o.start_date,
+                            total: o.total
+                        };
+                        var clonedrule = new NSOA.record.oaProjectBudgetRule();
+                        clonedrule.id = o.id;
+                        clonedrule.date = o.date;
+                        clonedrule.category = o.category;
+                        clonedrule.categoryid = o.categoryid;
+                        //clonedrule.enddate = o.end_date;
+                        clonedrule.itemid = o.itemid;
+                        clonedrule.job_codeid = o.job_codeid;
+                        clonedrule.notes = o.notes;
+                        clonedrule.period = o.period;
+                        clonedrule.productid = o.productid;
+                        clonedrule.project_taskid = array[i].id;
+                        clonedrule.projectid = array[i].project;
+                        clonedrule.quantity = o.quantity;
+                        clonedrule.rate = o.rate;
+                        //clonedrule.start_date = o.start_date;
+                        clonedrule.total = o.total;
+                        clonedrule.project_budget_groupid = topbgid;
+                        clonedrule.customerid = array[i].customer;
+                        // Invoke the add call
+                        var ruleresults = NSOA.wsapi.add([clonedrule]);
+                        // Get the new ID
+                        var ruleid = ruleresults[0].id;
+                        NSOA.meta.log('debug', 'Rule clone result: '+ JSON.stringify(ruleresults));
+                        var pbts = find_pbts(this.id,frompbgid,array[i].copyFrom,array[i].fromPrj,array[i].project,array[i].id,ruleid,topbgid,array[i].customer);
+                        NSOA.meta.log('debug', 'The PBTs to copy for this rule: ' + JSON.stringify(pbts));
+                        // Invoke the add call
+                        var txnresults = NSOA.wsapi.add(pbts);
+                        NSOA.meta.log('debug', 'PBT add results: ' + JSON.stringify(txnresults));
+                        // Get the new ID
+                        var txnid = txnresults[0].id;
+                        pbrarray.push(pbrjson);
+                    }
+                    //else{NSOA.meta.log('debug', 'No value to add...');}
+                });
+            } else {
+                //pbrarray.push(foundpbr);
+            }
         }
     }
     return pbrarray;
@@ -355,7 +356,7 @@ function check_queue() {
         if (isEmpty(resultsArray[0].objects) || resultsArray[0].objects.length < pageSize) limitReached = true;
         increment += pageSize;
     }
-
+    NSOA.meta.log('debug', 'Queue Results: ' + JSON.stringify(resultsArray_JSON));
     return resultsArray_JSON;
 }
 
