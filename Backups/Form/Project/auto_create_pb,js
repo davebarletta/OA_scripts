@@ -1,0 +1,63 @@
+function main(type) {
+    //After Save
+    if(type == 'new'){
+        var today = new Date();
+        var date_utils = require('date_utils');
+		var value = date_utils.date_to_string(today);
+        var newr = NSOA.form.getNewRecord();
+        create_pb(newr, value);
+        var custpo = create_custpo(newr, value);
+        link_to_project(newr, custpo);
+    }else{
+        return;
+    }
+}
+
+function create_pb(prj, date){
+    var obj = new NSOA.record.oaProjectBudgetGroup();
+	obj.approval_status = 'O';
+    obj.budget_by = 3;
+    obj.name = 'Forecast Budget';
+    obj.labor_subcategory = 1;
+    obj.projectid = prj.id;
+    obj.setting = "$h->{setting} = {" +
+                  "&apos;actuals&apos; => [],"+
+                  "&apos;company_color_coding&apos; => &apos;&apos;,"+
+    			  "&apos;import_type&apos; => &apos;booking&apos;" +
+				"};";
+    //obj.total = prj.prjCostBudget__c;
+    obj.unassigned_task = '1';
+    obj.customerid = prj.customerid;
+    obj.date = date;
+    obj.total_expected_cost = prj.prjCostBudget__c;
+    // Invoke the add call
+	var results = NSOA.wsapi.add([obj]);
+    NSOA.meta.log('debug', 'Results ' + JSON.stringify(results));
+}
+
+function create_custpo(newr, today){
+    var obj = new NSOA.record.oaCustomerpo();
+    obj.date = today;
+    obj.customerid = newr.customerid;
+    obj.active = '1';
+    obj.notes = "First Customer PO, automatically generated based on Total Revenue Amount.";
+    obj.total = 0;
+    obj.name = 'Auto-generated PO for ' + newr.name;
+    obj.currency = newr.prjBillingCurrency__c;
+    // Invoke the add call
+	var results = NSOA.wsapi.add([obj]);
+    NSOA.meta.log('debug', 'Results ' + JSON.stringify(results));
+    return results[0].id;
+}
+
+function link_to_project(newr, custpo){
+    var obj = new NSOA.record.oaCustomerpo_to_project();
+	obj.active = '1';
+    obj.customerpoid = custpo;
+    obj.projectid = newr.id;
+    obj.customerid = newr.customerid;
+    // Invoke the add call
+	var results = NSOA.wsapi.add([obj]);
+    NSOA.meta.log('debug', 'Results ' + JSON.stringify(results));
+    return results[0].id;
+}
