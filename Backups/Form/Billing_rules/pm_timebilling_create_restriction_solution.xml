@@ -1,0 +1,14 @@
+<platform_solution><objects><form_script><custom_fields></custom_fields><name>pm_timebilling_create_restriction.js</name><event>before_form_save</event><libraries></libraries><comments></comments><entrance_function>main</entrance_function><parameters></parameters><__is_linked>true</__is_linked><association>edit_project_billing_rule_time</association><code><![CDATA[function main(type) {
+    if (type === 'new'){
+        var user = NSOA.wsapi.whoami();
+        var roleid = user.role_id;
+        var role = NSOA.record.oaRole(roleid);
+        var rolename = role.name;
+        if (rolename === 'Project Manager' || rolename === 'Project Manager Contractor' || rolename === 'PM Contractor' || rolename ==='Senior Project Manager'){
+            NSOA.form.error('', "Please reach out to a member of the operations team if you need to create a new billing rule.");
+        }
+            
+    }else{
+        return;
+    }
+}]]></code></form_script></objects><version>1.1</version><title>pm_timebilling_create_restriction</title><description></description></platform_solution>
